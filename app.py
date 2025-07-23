@@ -1,10 +1,19 @@
 from flask import Flask, request, render_template_string
 import pickle
 import pandas as pd
-from feature_extractor import prepare_features  # Use prepare_features instead of extract_features
+from urllib.parse import urlparse
+from feature_extractor import prepare_features  #Use prepare_features instead of extract_features
 
 app = Flask(__name__)
 
+
+
+def is_valid_url(url):
+    try:
+        parsed = urlparse(url)
+        return all([parsed.scheme, parsed.netloc])
+    except:
+        return False
 # Load model and feature columns
 with open('phishing_model.pkl', 'rb') as f:
     model = pickle.load(f)
@@ -36,19 +45,23 @@ HTML = """
 def home():
     result = None
     url = None
+
     if request.method == 'POST':
         url = request.form['url']
-        features_df = prepare_features(url, feature_columns)
-        
-        # Heuristic override
-        if features_df['Shortining_Service'].iloc[0] == 1:
-            result = "Phishing 🚨"
+
+        if not is_valid_url(url):
+            result = "Invalid URL ❌"
         else:
-            pred = model.predict(features_df)[0]
-            result = "Phishing 🚨" if pred == 1 else "Legitimate ✅"
+            features_df = prepare_features(url, feature_columns)
+
+            # ✅ Heuristic override for shortening services
+            if 'Shortining_Service' in features_df.columns and features_df['Shortining_Service'].iloc[0] == 1:
+                result = "Phishing 🚨"
+            else:
+                pred = model.predict(features_df)[0]
+                result = "Phishing 🚨" if pred == 1 else "Legitimate ✅"
 
     return render_template_string(HTML, result=result, url=url)
-
 
 if __name__ == '__main__':
     app.run(debug=True)

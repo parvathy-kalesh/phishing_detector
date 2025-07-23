@@ -36,6 +36,16 @@ def extract_URL_Length(url):
     else:
         return -1
 
+
+
+def is_valid_url(url):
+    try:
+        parsed = urlparse(url)
+        return all([parsed.scheme, parsed.netloc])
+    except:
+        return False
+
+
 def extract_Shortining_Service(url):
     shortening_services = ["bit.ly", "goo.gl", "tinyurl.com", "ow.ly", "t.co", "is.gd", "buff.ly"]
     result = 1 if any(service in url for service in shortening_services) else -1
