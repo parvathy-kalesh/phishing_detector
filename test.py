@@ -1,8 +1,8 @@
-from feature_extractor import extract_features
+import pandas as pd
 
-url = "http://192.0.2.0:8080/confirm"
-features_df = extract_features(url)
-print(features_df[['having_IP_Address', 'port']])
+df = pd.read_csv('data/phishing_data_fixed.csv')  # Replace with your actual CSV file path
+print(df.columns)
+
 
 
 

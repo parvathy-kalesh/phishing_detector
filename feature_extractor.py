@@ -283,6 +283,26 @@ def extract_DNSRecord(url):
     except:
         return -1
 
+def extract_Impersonating_Brand(url):
+    fake_brands = ['paypal', 'apple', 'google', 'gmail', 'facebook', 'amazon', 'microsoft', 'netflix', 'bankofamerica', 'ebay']
+    suspicious_keywords = ['support', 'account', 'secure', 'login', 'update', 'verify']
+    
+    parsed = urllib.parse.urlparse(url)
+    domain = parsed.netloc.lower()  # full domain with subdomains
+
+    for brand in fake_brands:
+        if brand in domain:
+            for keyword in suspicious_keywords:
+                if keyword in domain:
+                    # Also consider suspicious TLDs or just flag
+                    return 1  # suspicious
+            # If brand in domain but no suspicious keywords, still suspicious enough for phishing
+            return 1
+    return -1
+
+
+
+
 def extract_web_traffic(url):
     return -1
 
@@ -330,6 +350,8 @@ def extract_features(url):
         'Google_Index': extract_Google_Index(url),
         'Links_pointing_to_page': extract_Links_pointing_to_page(url),
         'Statistical_report': extract_Statistical_report(url),
+        'Impersonating_Brand':  extract_Impersonating_Brand(url),
+
     }
     return pd.DataFrame([features])
 

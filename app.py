@@ -2,7 +2,8 @@ from flask import Flask, request, render_template_string
 import pickle
 import pandas as pd
 from urllib.parse import urlparse
-from feature_extractor import prepare_features  #Use prepare_features instead of extract_features
+from feature_extractor import *
+ #Use prepare_features instead of extract_features
 
 app = Flask(__name__)
 
@@ -54,14 +55,17 @@ def home():
         else:
             features_df = prepare_features(url, feature_columns)
 
-            # ✅ Heuristic override for shortening services
-            if 'Shortining_Service' in features_df.columns and features_df['Shortining_Service'].iloc[0] == 1:
+            # Heuristic overrides
+            if features_df['Shortining_Service'].iloc[0] == 1:
+                result = "Phishing 🚨"
+            elif extract_Impersonating_Brand(url) == 1:
                 result = "Phishing 🚨"
             else:
                 pred = model.predict(features_df)[0]
                 result = "Phishing 🚨" if pred == 1 else "Legitimate ✅"
 
     return render_template_string(HTML, result=result, url=url)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
