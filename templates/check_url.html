@@ -1,0 +1,24 @@
+<!-- templates/check_url.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>URL Checker</title>
+</head>
+<body>
+    <h2>🔍 Phishing URL Detector</h2>
+    <a href="{{ url_for('welcome') }}"><button>Back to Welcome</button></a>
+    <form method="POST">
+        <input type="text" name="url" placeholder="Enter a URL" required>
+        <input type="submit" value="Check">
+    </form>
+
+    {% if url %}
+        <p><strong>URL Entered:</strong> {{ url }}</p>
+    {% endif %}
+
+    {% if result %}
+        <h3>Result: {{ result }}</h3>
+        <p>Probabilities -> Legitimate: {{ prob_legit }}, Phishing: {{ prob_phish }}</p>
+    {% endif %}
+</body>
+</html>

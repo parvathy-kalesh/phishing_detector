@@ -1,13 +1,18 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template
+import joblib
 import pickle
-import pandas as pd
 from urllib.parse import urlparse
-from feature_extractor import *
- #Use prepare_features instead of extract_features
+from feature_extractor import prepare_features, extract_Impersonating_Brand
 
 app = Flask(__name__)
 
-
+# Whitelist of known legitimate domains
+WHITELIST = [
+    "google.com", "www.google.com",
+    "paypal.com", "www.paypal.com",
+    "amazon.com", "www.amazon.com",
+    "facebook.com", "www.facebook.com"
+]
 
 def is_valid_url(url):
     try:
@@ -15,37 +20,23 @@ def is_valid_url(url):
         return all([parsed.scheme, parsed.netloc])
     except:
         return False
-# Load model and feature columns
-with open('phishing_model.pkl', 'rb') as f:
-    model = pickle.load(f)
 
+# Load model and feature columns
+model = joblib.load('phishing_model.pkl')
 with open('feature_columns.pkl', 'rb') as f:
     feature_columns = pickle.load(f)
 
-HTML = """
-<!DOCTYPE html>
-<html>
-<head><title>Phishing URL Detection</title></head>
-<body>
-<h2>🔍 Phishing URL Detector</h2>
-<form method="POST">
-    <input type="text" name="url" placeholder="Enter a URL" required>
-    <input type="submit" value="Check">
-</form>
-{% if url %}
-    <p><strong>URL Entered:</strong> {{ url }}</p>
-{% endif %}
-{% if result %}
-    <h3>Result: {{ result }}</h3>
-{% endif %}
-</body>
-</html>
-"""
+# --- Routes ---
 
-@app.route('/', methods=['GET', 'POST'])
-def home():
+@app.route('/')
+def welcome():
+    return render_template('welcome.html')
+
+@app.route('/check', methods=['GET', 'POST'])
+def check_url():
     result = None
     url = None
+    prob_legit = prob_phish = None
 
     if request.method == 'POST':
         url = request.form['url']
@@ -53,22 +44,40 @@ def home():
         if not is_valid_url(url):
             result = "Invalid URL ❌"
         else:
-            features_df = prepare_features(url, feature_columns)
+            domain = urlparse(url).netloc.lower()
 
-            # Heuristic overrides
-            if features_df['Shortining_Service'].iloc[0] == 1:
-                result = "Phishing 🚨"
-            elif extract_Impersonating_Brand(url) == 1:
-                result = "Phishing 🚨"
+            # Check whitelist first
+            if domain in WHITELIST:
+                result = "Legitimate ✅"
+                prob_legit, prob_phish = 1.0, 0.0
             else:
+                features_df = prepare_features(url, feature_columns)
+                probs = model.predict_proba(features_df)[0]
                 pred = model.predict(features_df)[0]
-                result = "Phishing 🚨" if pred == 1 else "Legitimate ✅"
 
-    return render_template_string(HTML, result=result, url=url)
+                prob_legit = round(probs[0], 2)
+                prob_phish = round(probs[1], 2)
 
+                phishing_flag = False
+                if features_df['Shortining_Service'].iloc[0] == 1:
+                    phishing_flag = True
+                elif extract_Impersonating_Brand(url) == 1:
+                    phishing_flag = True
+                elif pred == 1 and prob_phish > 0.5:
+                    phishing_flag = True
+
+                result = "Phishing 🚨" if phishing_flag else "Legitimate ✅"
+
+    return render_template('check_url.html', result=result, url=url,
+                           prob_legit=prob_legit, prob_phish=prob_phish)
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+
+
+
+
 
 
 
