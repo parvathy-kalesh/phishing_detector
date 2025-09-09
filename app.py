@@ -44,33 +44,44 @@ def check_url():
         if not is_valid_url(url):
             result = "Invalid URL ❌"
         else:
-            domain = urlparse(url).netloc.lower()
+            domain = urlparse(url).hostname  # use hostname instead of netloc
 
-            # Check whitelist first
-            if domain in WHITELIST:
-                result = "Legitimate ✅"
-                prob_legit, prob_phish = 1.0, 0.0
-            else:
-                features_df = prepare_features(url, feature_columns)
-                probs = model.predict_proba(features_df)[0]
-                pred = model.predict(features_df)[0]
+            # ✅ Whitelist localhost and private IPs
+            try:
+                if domain in ["localhost", "127.0.0.1"] or ipaddress.ip_address(domain).is_private:
+                    result = "Legitimate ✅ (Local URL)"
+                    prob_legit, prob_phish = 1.0, 0.0
+                elif domain in WHITELIST:
+                    result = "Legitimate ✅"
+                    prob_legit, prob_phish = 1.0, 0.0
+                else:
+                    features_df = prepare_features(url, feature_columns)
+                    probs = model.predict_proba(features_df)[0]
+                    pred = model.predict(features_df)[0]
 
-                prob_legit = round(probs[0], 2)
-                prob_phish = round(probs[1], 2)
+                    prob_legit = round(probs[0], 2)
+                    prob_phish = round(probs[1], 2)
 
-                phishing_flag = False
-                if features_df['Shortining_Service'].iloc[0] == 1:
-                    phishing_flag = True
-                elif extract_Impersonating_Brand(url) == 1:
-                    phishing_flag = True
-                elif pred == 1 and prob_phish > 0.5:
-                    phishing_flag = True
+                    phishing_flag = False
+                    if features_df['Shortining_Service'].iloc[0] == 1:
+                        phishing_flag = True
+                    elif extract_Impersonating_Brand(url) == 1:
+                        phishing_flag = True
+                    elif pred == 1 and prob_phish > 0.5:
+                        phishing_flag = True
 
-                result = "Phishing 🚨" if phishing_flag else "Legitimate ✅"
+                    result = "Phishing 🚨" if phishing_flag else "Legitimate ✅"
+            except ValueError:
+                # fallback if domain is invalid
+                result = "Invalid URL ❌"
 
-    return render_template('check_url.html', result=result, url=url,
-                           prob_legit=prob_legit, prob_phish=prob_phish)
-
+    return render_template(
+        'check_url.html',
+        result=result,
+        url=url,
+        prob_legit=prob_legit,
+        prob_phish=prob_phish
+    )
 if __name__ == '__main__':
     app.run(debug=True)
 
