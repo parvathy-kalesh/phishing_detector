@@ -300,23 +300,63 @@ def extract_Impersonating_Brand(url):
             return 1
     return -1
 
-
-
-
 def extract_web_traffic(url):
-    return -1
-
-def extract_Page_Rank(url):
-    return -1
+    parsed = urlparse(url)
+    path_len = len(parsed.path)
+    query_len = len(parsed.query)
+    total_len = len(url)
+    
+    if total_len > 75 or path_len > 20 or query_len > 10:
+        return -1
+    elif total_len > 50:
+        return 0
+    else:
+        return 1
+   
+    
+  
+  
 
 def extract_Google_Index(url):
-    return -1
+    parsed = urlparse(url)
+    if parsed.scheme == 'https' and len(parsed.netloc) < 20:
+        return 1
+    elif parsed.scheme == 'http':
+        return 0
+    else:
+        return -1
+    
+
+def extract_Google_Index(url):
+    parsed = urlparse(url)
+    if parsed.scheme == 'https' and len(parsed.netloc) < 20:
+        return 1
+    elif parsed.scheme == 'http':
+        return 0
+    else:
+        return -1
 
 def extract_Links_pointing_to_page(url):
-    return -1
+    parsed = urlparse(url)
+    path_len = len(parsed.path.split('/'))
+    query_len = len(parsed.query.split('&')) if parsed.query else 0
+    
+    if path_len > 5 or query_len > 3:
+        return -1
+    elif path_len > 3:
+        return 0
+    else:
+        return 1
 
 def extract_Statistical_report(url):
-    return -1
+    count = url.count('@') + url.count('-') + url.count('//')
+    
+    if count > 3:
+        return -1
+    elif count == 2 or count == 3:
+        return 0
+    else:
+        return 1
 
 def extract_features(url):
     features = {
