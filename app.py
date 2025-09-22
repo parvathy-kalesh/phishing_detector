@@ -72,6 +72,8 @@ except Exception as e:
 def welcome():
     return render_template("welcome.html")
 
+
+
 @app.route("/check", methods=["GET", "POST"])
 def check_url():
     result = None
@@ -88,119 +90,60 @@ def check_url():
         elif not is_valid_url(url):
             result = "Invalid URL ❌"
         else:
-            # parse hostname and normalize
             parsed = urlparse(url)
-            hostname = parsed.hostname  # Usually returns None-safe hostname
+            hostname = parsed.hostname
             normalized = normalize_domain(hostname)
 
-            # Check local hostnames explicitly
-            try:
-                if normalized in ("localhost", "127.0.0.1"):
-                    result = "Legitimate ✅ (Local URL)"
-                    prob_legit, prob_phish = 1.0, 0.0
+            # Localhost / Private IP checks
+            if normalized in ("localhost", "127.0.0.1"):
+                result = "Legitimate ✅ (Local URL)"
+                prob_legit, prob_phish = 1.0, 0.0
+            elif is_ip_address(hostname):
+                try:
+                    ip_obj = ipaddress.ip_address(hostname)
+                    if ip_obj.is_private:
+                        result = "Legitimate ✅ (Private IP)"
+                        prob_legit, prob_phish = 1.0, 0.0
+                except ValueError:
+                    pass
 
-                # If hostname looks like IP, check if it's private
-                elif is_ip_address(hostname):
-                    try:
-                        ip_obj = ipaddress.ip_address(hostname)
-                        if ip_obj.is_private:
-                            result = "Legitimate ✅ (Private IP)"
-                            prob_legit, prob_phish = 1.0, 0.0
-                        else:
-                            # public IP — treat like any other domain (fall through to ML)
-                            pass
-                    except ValueError:
-                        # invalid IP format (shouldn't happen if is_ip_address True)
-                        pass
+            # Whitelist check
+            if result is None and normalized in WHITELIST_NORMALIZED:
+                result = "Legitimate ✅"
+                prob_legit, prob_phish = 1.0, 0.0
 
-                # Whitelist check (normalized)
-                if result is None and normalized in WHITELIST_NORMALIZED:
-                    result = "Legitimate ✅"
-                    prob_legit, prob_phish = 1.0, 0.0
+            # Run model if undecided
+            if result is None:
+                try:
+                    features_df = prepare_features(url, feature_columns)
+                    probs = model.predict_proba(features_df)[0]
+                    pred = model.predict(features_df)[0]
 
-                # If still undecided, run ML + heuristic checks
-                if result is None:
-                    # Ensure feature_columns available
-                    if feature_columns is None or model is None:
-                        # Cannot run model; mark unknown but do some basic heuristic checks
-                        # Heuristic checks: shortening service + impersonating brand
-                        short_flag = False
-                        try:
-                            features_df = prepare_features(url, feature_columns if feature_columns is not None else [])
-                            short_flag = bool(features_df.get("Shortining_Service", [0])[0])
-                        except Exception:
-                            short_flag = False
+                    prob_legit = round(float(probs[0]), 2)
+                    prob_phish = round(float(probs[1]), 2)
 
-                        brand_flag = False
-                        try:
-                            brand_flag = bool(extract_Impersonating_Brand(url) == 1)
-                        except Exception:
-                            brand_flag = False
+                    # Optional heuristics: mark additional reasons
+                    details["reason_shortening"] = bool(features_df.get("Shortining_Service", [0])[0] == 1)
+                    details["reason_impersonating_brand"] = bool(extract_Impersonating_Brand(url) == 1)
 
-                        if short_flag or brand_flag:
-                            result = "Phishing 🚨 (heuristic)"
-                            prob_legit, prob_phish = 0.0, 1.0
-                        else:
-                            result = "Unknown — model not loaded"
-                            prob_legit, prob_phish = 0.0, 0.0
-                    else:
-                        # Run feature extraction and model prediction
-                        try:
-                            features_df = prepare_features(url, feature_columns)
-                            probs = model.predict_proba(features_df)[0]
-                            pred = model.predict(features_df)[0]
+                    # Determine final result based on model probability (>0.5)
+                    result = "Phishing 🚨" if prob_phish > 0.5 else "Legitimate ✅"
 
-                            # probs ordering assumed [legit_prob, phish_prob]
-                            prob_legit = round(float(probs[0]), 2)
-                            prob_phish = round(float(probs[1]), 2)
+                except Exception as e:
+                    print(f"[ERROR] Prediction failed for URL={url}: {e}")
+                    result = "Error processing URL"
+                    prob_legit, prob_phish = 0.0, 0.0
 
-                            # Heuristic checks
-                            phishing_flag = False
-                            try:
-                                if features_df.get("Shortining_Service", [0])[0] == 1:
-                                    phishing_flag = True
-                                    details["reason_shortening"] = True
-                            except Exception:
-                                pass
-
-                            try:
-                                if extract_Impersonating_Brand(url) == 1:
-                                    phishing_flag = True
-                                    details["reason_impersonating_brand"] = True
-                            except Exception:
-                                pass
-
-                            # model prediction threshold
-                            if pred == 1 and prob_phish > 0.5:
-                                phishing_flag = True
-                                details["reason_model_predicted"] = True
-
-                            result = "Phishing 🚨" if phishing_flag else "Legitimate ✅"
-
-                        except Exception as e:
-                            # Catch any unexpected errors during feature extraction/prediction
-                            print(f"[ERROR] Prediction failed for URL={url}: {e}")
-                            result = "Error processing URL"
-                            prob_legit, prob_phish = 0.0, 0.0
-
-            except Exception as outer_e:
-                # Any unexpected outer errors (parsing etc.)
-                print(f"[ERROR] Unexpected error checking URL {url}: {outer_e}")
-                result = "Invalid URL ❌"
-                prob_legit, prob_phish = 0.0, 0.0
-
-    # Render the check template with consistent numeric probabilities
     return render_template(
         "check_url.html",
         result=result,
         url=url,
-        prob_legit=f"{prob_legit:.2f}" if prob_legit is not None else "0.00",
-        prob_phish=f"{prob_phish:.2f}" if prob_phish is not None else "0.00",
+        prob_legit=f"{prob_legit:.2f}",
+        prob_phish=f"{prob_phish:.2f}",
         details=details
     )
 
 if __name__ == "__main__":
-    # WARNING: debug=True should NOT be used in production
     app.run(host="0.0.0.0", port=5000, debug=False)
 
 

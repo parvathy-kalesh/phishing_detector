@@ -1,54 +1,41 @@
+# phishing_compare.py
+
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-import xgboost as xgb
-import joblib
-import pickle
+from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+from sklearn.metrics import accuracy_score
 
 # 1. Load dataset
-df = pd.read_csv("phishing_dataset.csv")
+# Make sure your dataset path is correct
+df = pd.read_csv("data/phishing_data_fixed.csv")
 
-# 2. Separate features and labels
-X = df.drop("phishing", axis=1)
-y = df["phishing"]
+# 2. Separate features and target
+X = df.drop("Result", axis=1)   # features
+y = df["Result"]                # target
 
-# 3. Train-test split (stratify to keep phishing/legit ratio)
+# 3. Convert -1 to 0 for XGBoost
+y = np.where(y == -1, 0, 1)
+
+# 4. Split into train and test sets
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42, stratify=y
+    X, y, test_size=0.2, random_state=42
 )
 
-# 4. Train XGBoost model
-model = xgb.XGBClassifier(
-    n_estimators=200,       # number of trees
-    max_depth=6,            # tree depth, lower to reduce overfitting
-    learning_rate=0.1,      # step size shrinkage
-    subsample=0.8,          # fraction of samples per tree
-    colsample_bytree=0.8,   # fraction of features per tree
-    scale_pos_weight=1,     # adjust if phishing class is imbalanced
-    random_state=42,
-    use_label_encoder=False,
-    eval_metric='logloss'   # avoid warning in newer xgboost versions
-)
+# 5. Random Forest
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_model.fit(X_train, y_train)
+rf_pred = rf_model.predict(X_test)
+rf_acc = accuracy_score(y_test, rf_pred)
+print("Random Forest Accuracy:", rf_acc)
 
-model.fit(X_train, y_train)
-
-# 5. Evaluate on train set
-train_pred = model.predict(X_train)
-train_acc = accuracy_score(y_train, train_pred)
-
-# 6. Evaluate on test set
-test_pred = model.predict(X_test)
-test_acc = accuracy_score(y_test, test_pred)
-
-print("Train Accuracy:", train_acc)
-print("Test Accuracy :", test_acc)
-print("\nClassification Report:\n", classification_report(y_test, test_pred))
-print("\nConfusion Matrix:\n", confusion_matrix(y_test, test_pred))
-
-# 7. Save model and feature columns for Flask
-joblib.dump(model, "phishing_model_xgb.pkl")
-with open("feature_columns_xgb.pkl", "wb") as f:
-    pickle.dump(list(X.columns), f)
+# 6. XGBoost
+xgb_model = XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42)
+xgb_model.fit(X_train, y_train)
+xgb_pred = xgb_model.predict(X_test)
+xgb_acc = accuracy_score(y_test, xgb_pred)
+print("XGBoost Accuracy:", xgb_acc)
 
 
 

@@ -5,6 +5,8 @@ from bs4 import BeautifulSoup
 import socket
 import datetime
 import pandas as pd
+import whois
+from datetime import datetime
 
 def extract_having_IP_Address(url):
     domain = urllib.parse.urlparse(url).netloc
@@ -96,8 +98,32 @@ def extract_SSLfinal_State(url):
     except Exception:
         return -1
 
+import whois
+from datetime import datetime
+
 def extract_Domain_registeration_length(url):
-    return 1
+    try:
+        domain_name = urlparse(url).netloc
+        w = whois.whois(domain_name)
+        
+        # Some domains may return a list of dates; pick the first one
+        creation_date = w.creation_date
+        expiration_date = w.expiration_date
+        
+        if isinstance(creation_date, list):
+            creation_date = creation_date[0]
+        if isinstance(expiration_date, list):
+            expiration_date = expiration_date[0]
+        
+        if creation_date and expiration_date:
+            # Length in days
+            reg_length = (expiration_date - creation_date).days
+            return reg_length
+        else:
+            return -1  # Could not retrieve dates
+    except Exception as e:
+        return -1  # Error retrieving WHOIS info
+
 
 def extract_Favicon(url):
     try:
@@ -234,7 +260,54 @@ def extract_Submitting_to_email(url):
         return -1
 
 def extract_Abnormal_URL(url):
-    return -1
+    try:
+        # Parse URL
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+        path = parsed.path
+
+        # Heuristic checks
+        if re.search(r'@', url):
+            return 1
+        if re.search(r'//', path):
+            return 1
+        if '-' in hostname:
+            return 1
+        if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', hostname):
+            return 1  # IP address instead of domain
+
+        # Otherwise normal
+        return -1
+    except Exception:
+        return -1
+
+
+from urllib.parse import urlparse
+
+def extract_Page_Rank(url):
+    domain = urlparse(url).netloc.lower()
+
+    # Trusted / popular domains (high PageRank)
+    trusted_sites = [
+        "google.com", "www.google.com",
+        "wikipedia.org", "www.wikipedia.org",
+        "amazon.com", "www.amazon.com",
+        "facebook.com", "www.facebook.com",
+        "twitter.com", "www.twitter.com",
+        "linkedin.com", "www.linkedin.com",
+        "youtube.com", "www.youtube.com"
+    ]
+
+    # Check if domain is trusted
+    if any(site in domain for site in trusted_sites):
+        return 1   # Legitimate
+
+    # Heuristic: very long domain names are suspicious
+    if len(domain) > 30:
+        return -1  # Phishing
+
+    # Default (uncertain)
+    return 0
 
 def extract_Redirect(url):
     try:
@@ -301,19 +374,20 @@ def extract_Impersonating_Brand(url):
     return -1
 
 def extract_web_traffic(url):
-    parsed = urlparse(url)
-    path_len = len(parsed.path)
-    query_len = len(parsed.query)
-    total_len = len(url)
-    
-    if total_len > 75 or path_len > 20 or query_len > 10:
-        return -1
-    elif total_len > 50:
-        return 0
-    else:
-        return 1
-   
-    
+    try:
+        parsed = urlparse(url)
+        path_len = len(parsed.path)
+        query_len = len(parsed.query)
+        total_len = len(url)
+
+        if total_len > 150 or path_len > 40 or query_len > 20:
+            return -1
+        elif total_len > 75:
+            return 0
+        else:
+            return 1
+    except:
+        return -1   
   
   
 
