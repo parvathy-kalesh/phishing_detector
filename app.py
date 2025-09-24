@@ -12,7 +12,7 @@ app = Flask(__name__)
 MODEL_PATH = "phishing_model.pkl"
 FEATURE_COLUMNS_PATH = "feature_columns.pkl"
 
-# Whitelist of known legitimate domains (can include or exclude www.)
+# Whitelist of known legitimate domains
 WHITELIST = [
     "google.com", "www.google.com",
     "paypal.com", "www.paypal.com",
@@ -20,11 +20,13 @@ WHITELIST = [
     "facebook.com", "www.facebook.com"
 ]
 
-# Normalize whitelist (strip www. and lowercase) for easier matching
+# Normalize whitelist
 WHITELIST_NORMALIZED = {d.lower().lstrip("www.") for d in WHITELIST}
 
-# --- Helper functions ---
+# Brand keywords for impersonation check
+BRAND_KEYWORDS = ["paypal", "google", "amazon", "facebook"]
 
+# --- Helper functions ---
 def is_valid_url(url: str) -> bool:
     """Basic URL validation using urlparse."""
     try:
@@ -52,27 +54,26 @@ def normalize_domain(hostname: str) -> str:
 # --- Load model and feature columns ---
 model = None
 feature_columns = None
+
 try:
     model = joblib.load(MODEL_PATH)
+    print(f"[INFO] Loaded model from {MODEL_PATH}")
 except Exception as e:
-    # If model fails to load, set model to None and print a helpful message
-    print(f"[WARN] Could not load model from {MODEL_PATH}: {e}")
+    print(f"[WARN] Could not load model: {e}")
     model = None
 
 try:
     with open(FEATURE_COLUMNS_PATH, "rb") as f:
         feature_columns = pickle.load(f)
+    print(f"[INFO] Loaded feature columns from {FEATURE_COLUMNS_PATH}")
 except Exception as e:
-    print(f"[WARN] Could not load feature columns from {FEATURE_COLUMNS_PATH}: {e}")
+    print(f"[WARN] Could not load feature columns: {e}")
     feature_columns = None
 
 # --- Routes ---
-
 @app.route("/")
 def welcome():
     return render_template("welcome.html")
-
-
 
 @app.route("/check", methods=["GET", "POST"])
 def check_url():
@@ -112,8 +113,17 @@ def check_url():
                 result = "Legitimate ✅"
                 prob_legit, prob_phish = 1.0, 0.0
 
-            # Run model if undecided
+            # Brand impersonation check
             if result is None:
+                for brand in BRAND_KEYWORDS:
+                    if brand in normalized and normalized not in WHITELIST_NORMALIZED:
+                        result = f"Phishing 🚨 (Impersonating {brand})"
+                        prob_legit, prob_phish = 0.0, 1.0
+                        details["reason_impersonating_brand"] = f"Suspicious use of brand: {brand}"
+                        break
+
+            # Run ML model if undecided
+            if result is None and model is not None and feature_columns is not None:
                 try:
                     features_df = prepare_features(url, feature_columns)
                     probs = model.predict_proba(features_df)[0]
@@ -122,17 +132,27 @@ def check_url():
                     prob_legit = round(float(probs[0]), 2)
                     prob_phish = round(float(probs[1]), 2)
 
-                    # Optional heuristics: mark additional reasons
-                    details["reason_shortening"] = bool(features_df.get("Shortining_Service", [0])[0] == 1)
-                    details["reason_impersonating_brand"] = bool(extract_Impersonating_Brand(url) == 1)
+                    # Extra details (heuristics)
+                    details["reason_shortening"] = (
+                        "Likely shortened URL" if "Shortining_Service" in features_df.columns and features_df["Shortining_Service"].iloc[0] == 1 else None
+                    )
+                    if extract_Impersonating_Brand(url) == 1:
+                        details["reason_impersonating_brand"] = "Impersonating brand detected"
 
-                    # Determine final result based on model probability (>0.5)
-                    result = "Phishing 🚨" if prob_phish > 0.5 else "Legitimate ✅"
-
+                    # Decision with threshold
+                    if prob_phish >= 0.6:
+                        result = "Phishing 🚨"
+                    elif prob_legit >= 0.6:
+                        result = "Legitimate ✅"
+                    else:
+                        result = "Suspicious ⚠️ (Unclear)"
                 except Exception as e:
                     print(f"[ERROR] Prediction failed for URL={url}: {e}")
                     result = "Error processing URL"
                     prob_legit, prob_phish = 0.0, 0.0
+
+            elif result is None:
+                result = "Model not available ❌"
 
     return render_template(
         "check_url.html",
@@ -145,6 +165,7 @@ def check_url():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
