@@ -46,12 +46,13 @@ def extract_URL_Length(url):
 # ---------------------------
 # 3. Shortening Service
 # ---------------------------
-def extract_Shortining_Service(url):
+def extract_Shortening_Service(url):
     shortening_services = [
         "bit.ly", "goo.gl", "tinyurl.com", "ow.ly", "t.co",
         "is.gd", "buff.ly", "shorte.st", "cutt.ly", "bit.do"
     ]
-    return 1 if any(service in url for service in shortening_services) else -1
+    domain = urlparse(url).netloc.lower()
+    return 1 if domain in shortening_services else -1
 
 # ---------------------------
 # 4. Having @ Symbol

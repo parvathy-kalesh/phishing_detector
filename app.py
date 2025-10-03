@@ -9,7 +9,7 @@ from feature_extractor import prepare_features, extract_Impersonating_Brand
 app = Flask(__name__)
 
 # --- Configuration ---
-MODEL_PATH = "phishing_model.pkl"
+MODEL_PATH = "phishing_model_weighted.pkl"
 FEATURE_COLUMNS_PATH = "feature_columns.pkl"
 
 # Whitelist of known legitimate domains
