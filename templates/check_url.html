@@ -17,17 +17,40 @@
         }
 
         .container {
+            position: relative;
             background: #fff;
             border-radius: 15px;
             box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-            padding: 30px 40px;
+            padding: 40px;
             text-align: center;
             width: 400px;
             animation: fadeIn 0.6s ease-in-out;
         }
 
+        /* 🔙 Back Button */
+        .back-btn {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: linear-gradient(135deg, #001f3f, #3a6073);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .back-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 14px rgba(0,0,0,0.3);
+        }
+
         h2 {
             color: #001f3f;
+            margin-top: 20px;
             margin-bottom: 20px;
         }
 
@@ -47,7 +70,7 @@
             box-shadow: 0 0 6px #3a6073;
         }
 
-        input[type="submit"], button {
+        input[type="submit"] {
             background: linear-gradient(135deg, #001f3f, #3a6073);
             border: none;
             color: white;
@@ -60,7 +83,7 @@
             transition: all 0.3s ease;
         }
 
-        input[type="submit"]:hover, button:hover {
+        input[type="submit"]:hover {
             transform: scale(1.05);
             box-shadow: 0px 4px 12px rgba(0,0,0,0.3);
         }
@@ -91,10 +114,13 @@
 </head>
 <body>
     <div class="container">
+        <!-- 🔙 Back Button -->
+        <a href="{{ url_for('welcome') }}" class="back-btn">⬅ Back</a>
+
         <h2>🔍 Phishing URL Detector</h2>
-        <a href="{{ url_for('welcome') }}"><button>⬅ Back</button></a>
-        <form method="POST">
-            <input type="text" name="url" placeholder="Enter a URL" required>
+
+        <form method="POST" id="urlForm">
+            <input type="text" id="urlInput" name="url" placeholder="Enter a URL" required>
             <br>
             <input type="submit" value="Check">
         </form>
@@ -104,13 +130,30 @@
         {% endif %}
 
         {% if result %}
-            <div class="result {% if result == 'Legitimate ✅' %}legit{% else %}phish{% endif %}">
+            <div class="result {% if result == 'Legitimate ✅' %}legit{% else %}phish{% endif %}" id="resultBox">
                 <h3>Result: {{ result }}</h3>
                 <p>Probabilities → Legitimate: {{ prob_legit }}, Phishing: {{ prob_phish }}</p>
             </div>
         {% endif %}
     </div>
+
+    <script>
+        // 🧹 Clear previous result when typing new URL
+        const urlInput = document.getElementById('urlInput');
+        const resultBox = document.getElementById('resultBox');
+
+        if (urlInput) {
+            urlInput.addEventListener('input', () => {
+                if (resultBox) {
+                    resultBox.style.display = 'none';
+                }
+            });
+        }
+    </script>
 </body>
 </html>
+
+
+
 
 
