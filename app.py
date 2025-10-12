@@ -70,6 +70,13 @@ except Exception as e:
     print(f"[WARN] Could not load feature columns: {e}")
     feature_columns = None
 
+# Pre-create test-net networks for explicit checks
+TEST_NETS = [
+    ipaddress.ip_network("192.0.2.0/24"),    # TEST-NET-1
+    ipaddress.ip_network("198.51.100.0/24"), # TEST-NET-2
+    ipaddress.ip_network("203.0.113.0/24"),  # TEST-NET-3
+]
+
 # --- Routes ---
 @app.route("/")
 def welcome():
@@ -95,25 +102,48 @@ def check_url():
             hostname = parsed.hostname
             normalized = normalize_domain(hostname)
 
-            # Localhost / Private IP checks
+            # --- IP-based decision (TEST-NET/reserved first, then private) ---
             if normalized in ("localhost", "127.0.0.1"):
                 result = "Legitimate ✅ (Local URL)"
                 prob_legit, prob_phish = 1.0, 0.0
+
             elif is_ip_address(hostname):
                 try:
                     ip_obj = ipaddress.ip_address(hostname)
-                    if ip_obj.is_private:
-                        result = "Legitimate ✅ (Private IP)"
-                        prob_legit, prob_phish = 1.0, 0.0
-                except ValueError:
-                    pass
 
-            # Whitelist check
+                    # 1) Reserved/test-net/multicast/link-local/loopback -> suspicious
+                    if (
+                        ip_obj.is_reserved
+                        or ip_obj.is_multicast
+                        or ip_obj.is_link_local
+                        or ip_obj.is_loopback
+                        or any(ip_obj in net for net in TEST_NETS)
+                    ):
+                        result = "Phishing 🚨 (Suspicious/Reserved IP)"
+                        prob_legit, prob_phish = 0.0, 1.0
+                        details["reason_ip"] = f"IP address {hostname} is reserved / test-net / loopback / link-local / multicast."
+
+                    # 2) Private IP ranges -> legitimate (internal network)
+                    elif ip_obj.is_private:
+                        result = "Legitimate ✅ (Private Network)"
+                        prob_legit, prob_phish = 1.0, 0.0
+
+                    # 3) Otherwise treat as external numeric IP -> suspicious by default
+                    else:
+                        # External numeric IP (public IP). Numeric IPs hosting services are unusual for legit sites.
+                        result = "Phishing 🚨 (External Numeric IP)"
+                        prob_legit, prob_phish = 0.0, 1.0
+                        details["reason_ip"] = f"Host is a numeric public IP ({hostname})."
+                except ValueError:
+                    result = "Invalid IP Format ❌"
+                    prob_legit, prob_phish = 0.0, 0.0
+
+            # --- Whitelist check ---
             if result is None and normalized in WHITELIST_NORMALIZED:
                 result = "Legitimate ✅"
                 prob_legit, prob_phish = 1.0, 0.0
 
-            # Brand impersonation check
+            # --- Brand impersonation check ---
             if result is None:
                 for brand in BRAND_KEYWORDS:
                     if brand in normalized and normalized not in WHITELIST_NORMALIZED:
@@ -122,24 +152,27 @@ def check_url():
                         details["reason_impersonating_brand"] = f"Suspicious use of brand: {brand}"
                         break
 
-            # Run ML model if undecided
+            # --- Run ML model if undecided ---
             if result is None and model is not None and feature_columns is not None:
                 try:
                     features_df = prepare_features(url, feature_columns)
                     probs = model.predict_proba(features_df)[0]
                     pred = model.predict(features_df)[0]
 
+                    # adapt ordering if your model labeling differs; assuming [legit, phish]
                     prob_legit = round(float(probs[0]), 2)
                     prob_phish = round(float(probs[1]), 2)
 
-                    # Extra details (heuristics)
+                    # Extra heuristic details
                     details["reason_shortening"] = (
-                        "Likely shortened URL" if "Shortining_Service" in features_df.columns and features_df["Shortining_Service"].iloc[0] == 1 else None
+                        "Likely shortened URL"
+                        if "Shortining_Service" in features_df.columns and features_df["Shortining_Service"].iloc[0] == 1
+                        else None
                     )
                     if extract_Impersonating_Brand(url) == 1:
                         details["reason_impersonating_brand"] = "Impersonating brand detected"
 
-                    # Decision with threshold
+                    # Final decision with threshold
                     if prob_phish >= 0.6:
                         result = "Phishing 🚨"
                     elif prob_legit >= 0.6:
@@ -165,6 +198,7 @@ def check_url():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 

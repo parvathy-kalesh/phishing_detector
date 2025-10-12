@@ -1,84 +1,59 @@
-# train_test_accuracy_graph.py
-
 import pandas as pd
+import joblib
 import matplotlib.pyplot as plt
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
 # -----------------------------
-# 1. Load dataset
+# 1. Load model and dataset
 # -----------------------------
-df = pd.read_csv("data/phishing_data_fixed.csv")
+model_path = "phishing_model_weighted_graph.pkl"
+data_path = "data/phishing_data_fixed.csv"
 
-# Fix class labels: convert -1 -> 0 for legitimate
+print("🔹 Loading model and dataset...")
+clf = joblib.load(model_path)
+df = pd.read_csv(data_path)
+
+# -----------------------------
+# 2. Prepare feature names
+# -----------------------------
 df["Result"] = df["Result"].replace(-1, 0)
-
-# Separate features and target
 X = df.drop(columns=["Result"])
-y = df["Result"]
+feature_names = X.columns
 
 # -----------------------------
-# 2. Split dataset (70/30)
-# -----------------------------
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y,
-    test_size=0.3,
-    random_state=42,
-    stratify=y
-)
-
-# -----------------------------
-# 3. Train Random Forest
-# -----------------------------
-clf = RandomForestClassifier(
-    n_estimators=100,
-    max_depth=None,
-    max_features="sqrt",
-    min_samples_leaf=5,
-    class_weight="balanced",
-    random_state=42
-)
-clf.fit(X_train, y_train)
-
-# -----------------------------
-# 4. Predict and evaluate
-# -----------------------------
-y_train_pred = clf.predict(X_train)
-y_test_pred = clf.predict(X_test)
-
-train_acc = accuracy_score(y_train, y_train_pred)
-test_acc = accuracy_score(y_test, y_test_pred)
-
-print(f"Train Accuracy: {train_acc:.4f}")
-print(f"Test Accuracy: {test_acc:.4f}")
-
-print("\nConfusion Matrix (Test Set):\n", confusion_matrix(y_test, y_test_pred))
-print("\nClassification Report (Test Set):\n", classification_report(y_test, y_test_pred))
-
-# -----------------------------
-# 5. Feature importances plot
+# 3. Get feature importance
 # -----------------------------
 importances = clf.feature_importances_
-feature_names = X.columns
-indices = importances.argsort()[::-1]
 
-plt.figure(figsize=(12,6))
-plt.title("Feature Importances")
-plt.bar(range(len(importances)), importances[indices], align="center")
-plt.xticks(range(len(importances)), [feature_names[i] for i in indices], rotation=90)
+importance_df = pd.DataFrame({
+    "Feature": feature_names,
+    "Importance": importances
+}).sort_values(by="Importance", ascending=False)
+
+# -----------------------------
+# 4. Display top 15 features
+# -----------------------------
+print("\n🔍 Top 15 Most Important Features:\n")
+print(importance_df.head(15))
+
+# -----------------------------
+# 5. Plot top 15 features
+# -----------------------------
+plt.figure(figsize=(10,6))
+importance_df.head(15).plot(
+    kind="barh", x="Feature", y="Importance", legend=False, color="teal"
+)
+plt.gca().invert_yaxis()
+plt.title("Top 15 Important Features - Random Forest Model")
+plt.xlabel("Feature Importance Score")
 plt.tight_layout()
 plt.show()
 
 # -----------------------------
-# 6. Train/Test Accuracy comparison graph
+# 6. Save full feature importance list
 # -----------------------------
-plt.figure(figsize=(6,4))
-plt.bar(["Train Accuracy", "Test Accuracy"], [train_acc, test_acc], color=["green", "blue"])
-plt.ylim(0,1)
-plt.ylabel("Accuracy")
-plt.title("Random Forest Accuracy Comparison")
-plt.show()
+output_csv = "feature_importance_weighted.csv"
+importance_df.to_csv(output_csv, index=False)
+print(f"\n📁 Full feature importance saved to: {output_csv}")
 
 
 
