@@ -4,6 +4,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
 import joblib
+from sklearn.metrics import classification_report
 
 # -----------------------------
 # 1. Load dataset
@@ -93,7 +94,11 @@ print(f"Test Accuracy: {accuracy_score(y_test, y_test_pred):.4f}")
 # -----------------------------
 joblib.dump(final_clf, "phishing_model_weighted_graph.pkl")
 print("\n✅ Model saved as phishing_model_weighted_graph.pkl")
+print("\nClassification Report (Training Data):")
+print(classification_report(y_train, y_train_pred, target_names=['Legitimate', 'Phishing']))
 
+print("\nClassification Report (Testing Data):")
+print(classification_report(y_test, y_test_pred, target_names=['Legitimate', 'Phishing']))
 
 
 
